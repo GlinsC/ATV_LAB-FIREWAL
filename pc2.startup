@@ -1,6 +1,6 @@
-ip addr add 10.0.1.11/24 dev eth0
-ip link set eth0 up
-ip route add default via 10.0.1.1
+# Define o endereço MAC estático antes de subir a interface
+ifconfig eth0 hw ether 9a:1e:74:aa:da:44
 
-# L2 (MAC)
-arptables -A FORWARD --src-mac 6e:9d:e8:21:2b:72 -j DROP
+# Configura o IP e Gateway
+ifconfig eth0 10.0.1.11/24 up
+route add default gw 10.0.1.1

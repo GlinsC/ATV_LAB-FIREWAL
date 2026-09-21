@@ -1,16 +1,12 @@
-# Interface eth0 atuando como o destino da Internet (ex: 8.8.8.8)
-ip addr add 8.8.8.8/24 dev eth0
-ip link set eth0 up
-
-# Interface eth1 conectada ao Firewall (Link /30)
-ip addr add 198.51.100.2/30 dev eth1
-ip link set eth1 up
-
-# Encaminhamento e NAT
 sysctl -w net.ipv4.ip_forward=1
-iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
 
-# Rotas de retorno para as redes internas via Firewall
-ip route add 10.0.1.0/24 via 198.51.100.1
-ip route add 10.0.2.0/24 via 198.51.100.1
-ip route add 10.0.3.0/24 via 198.51.100.1
+# Interface conectada ao Firewall (Rede A)
+ifconfig eth0 198.51.100.2/30 up
+
+# Rotas para as sub-redes internas via Firewall (198.51.100.1)
+route add -net 10.0.1.0/24 gw 198.51.100.1
+route add -net 10.0.2.0/24 gw 198.51.100.1
+route add -net 10.0.3.0/24 gw 198.51.100.1
+
+# NAT na interface bridged (eth1) para dar acesso à Internet
+iptables -t nat -A POSTROUTING -o eth1 -j MASQUERADE

@@ -1,53 +1,42 @@
-# Endereçamento das interfaces
-ip addr add 198.51.100.1/30 dev eth0
-ip link set eth0 up
-
-ip addr add 10.0.1.1/24 dev eth1
-ip link set eth1 up
-
-ip addr add 10.0.2.1/24 dev eth2
-ip link set eth2 up
-
-ip addr add 10.0.3.1/24 dev eth3
-ip link set eth3 up
-
-# Rota padrão para a Internet via r0
-ip route add default via 198.51.100.2
-
-# Habilitar roteamento IPv4
 sysctl -w net.ipv4.ip_forward=1
 
+# Configuração dos endereços IP das interfaces
+ifconfig eth0 198.51.100.1/30 up   # Conexão com r0 (Rede A)
+ifconfig eth1 10.0.1.1/24 up        # Sub-rede LAN (Rede B)
+ifconfig eth2 10.0.2.1/24 up        # Sub-rede DMZ (Rede C)
+ifconfig eth3 10.0.3.1/24 up        # Sub-rede ADM (Rede D)
+
+# Rota Padrão para a Internet apontando para o r0
+route add default gw 198.51.100.2
+
 # =========================================================
-# PASSO 2: SEGURANÇA DE PERÍMETRO (iptables - Stateful)
+# POLÍTICA DE SEGURANÇA DE PERÍMETRO (TAREFA 2)
 # =========================================================
 
-# Flush de regras anteriores
+# Limpeza de regras anteriores
 iptables -F
+iptables -F -t nat
 iptables -X
-iptables -t nat -F
 
-# Política Padrão: Default Deny no tráfego de passagem
-iptables -P INPUT ACCEPT
+# Políticas padrão: BLOQUEAR TUDO
+iptables -P INPUT DROP
 iptables -P FORWARD DROP
 iptables -P OUTPUT ACCEPT
+
+#Para não ficar colocando toda vez que reiniciar o ambiente coloquei o comando de bloqueio de rede por mac do pc2
+iptables -A FORWARD -i eth1 -m mac --mac-source 9a:1e:74:aa:da:44 -j DROP
 
 # 1. Permitir respostas de conexões já estabelecidas/relacionadas (Stateful)
 iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
 
-# 2. LAN -> Internet (Permitir)
-iptables -A FORWARD -i eth1 -o eth0 -j ACCEPT
+# 2. LAN -> Internet: Permitir novas conexões originadas na LAN
+iptables -A FORWARD -i eth1 -o eth0 -s 10.0.1.0/24 -m state --state NEW -j ACCEPT
 
-# 3. LAN -> DMZ (Permitir acesso total à Web e DNS da DMZ)
-iptables -A FORWARD -i eth1 -o eth2 -j ACCEPT
+# 3. LAN -> DMZ: Permitir acesso apenas aos serviços HTTP (Web) e DNS
+iptables -A FORWARD -i eth1 -o eth2 -s 10.0.1.0/24 -d 10.0.2.80 -p tcp --dport 80 -m state --state NEW -j ACCEPT
+iptables -A FORWARD -i eth1 -o eth2 -s 10.0.1.0/24 -d 10.0.2.53 -p udp --dport 53 -m state --state NEW -j ACCEPT
 
-# 4. Internet -> Web da DMZ (Permitir conexões de fora para o servidor Web)
-iptables -A FORWARD -i eth0 -o eth2 -d 10.0.2.10 -p tcp --dport 80 -j ACCEPT
-iptables -A FORWARD -i eth0 -o eth2 -d 10.0.2.10 -p tcp --dport 443 -j ACCEPT
 
-# As regras abaixo ficam bloqueadas implicitamente pela política FORWARD DROP:
-# - Internet -> LAN
-# - DMZ -> LAN (novas conexões)
 
-# L3 e L4
-iptables-legacy -I FORWARD -s 10.0.1.0/24 -d 10.0.2.10 -j DROP
-iptables-legacy -I FORWARD -p tcp --dport 6881 -j DROP
+# 4. Internet -> DMZ: Permitir acesso externo APENAS ao Servidor Web
+iptables -A FORWARD -i eth0 -o eth2 -d 10.0.2.80 -p tcp --dport 80 -m state --state NEW -j ACCEPT
